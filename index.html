@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>(ノ｀⌒´)ノ︵uoᴉʇɐzᴉɯᴉʇdO</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Helvetica'; color: white; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+        color: #DBDAB1;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+      .remark-slide-content { font-size: 24px; }
+
+      table {
+        border-collapse: collapse;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      th, td {
+        padding: 10px 40px;
+        border: 1px solid #DDDDDD;
+      }
+
+      th {
+        background-color: #444444;
+      }
+
+      a {
+        color: #AA88FF;
+        text-decoration: none;
+      }
+
+      .title {
+        font-size: 80px;
+      }
+
+      .black {
+        color: black;
+      }
+
+      .agenda ol {
+        font-size: 28px;
+      }
+
+      #turtleContainer {
+        position: absolute;
+        width: 100%;
+        height: 80px;
+        overflow: hidden;
+        bottom: 10px;
+      }
+
+      #turtle {
+        position: relative;
+        left: 10px;
+        top: 20px;
+        transition: left;
+        z-index: 10;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="turtleContainer">
+      <img id="turtle" src="Images/Turtle.png">
+    </div>
+    <textarea id="source">
+
+layout: true
+background-color: #272822
+
+---
+
+class: center, middle
+# .title[Pisanie wydajnego kodu w Unity]
+
+---
+
+# Radosław Paszkowski
+## @RadekPaszkowski - paszkowski.radek@gmail.com
+
+.center[![Blindflug Studios](Images/Blindflug_Logo.png)]
+.center[![Politechnika Poznańska](Images/Polibuda.png)        
+![Ruch Projektantów Gier](Images/RPG_Logo.png)]
+
+---
+
+background-image: url(Images/Clouds.png)
+background-position: center bottom
+background-size: contain
+
+---
+
+class: agenda
+
+# Plan
+
+1. [Kiedy optymalizować?](#Optimization)
+2. [Przydatne narzędzia](#Tools)
+3. [Garbage Collector - Stack vs Heap](#GC)
+4. [Cache](#Cache)
+5. [Złożoność obliczeniowa](#Complexity)
+6. [Optymalizacja Unity](#Unity)
+7. [Programowanie współbieżne, Coroutines, Compute Shaders](#Threads)
+8. [Źródła](#Sources)
+
+---
+
+name: Optimization
+
+# Kiedy optymalizować?
+
+"We should forget about small efficiencies, say about 97% of the time: premature optimization is the root of all evil. Yet we should not pass up our opportunities in that critical 3%."
+
+### .right["Structured Programming with go to statements" ~Donald Knuth]
+
+--
+
+***
+# .center[Data Oriented Design]
+
+---
+
+name: Tools
+class: center, middle
+
+# Przydatne narzędzia
+
+---
+
+## 1. Profiler - Unity
+![Unity](Images/Profiler.png)
+
+---
+
+## 1. Profiler - Instruments (Apple)
+![Instruments](Images/Instruments.png)
+
+---
+
+## 1. Profiler - Xperf (Windows)
+![XPerf](Images/Xperf.png)
+
+---
+
+## 2. IL Code Viewer - Resharper
+![Resharper IL](Images/IL_Resharper.png)
+
+---
+
+## 2. IL Code Viewer - ILDASM (Visual Studio)
+![Windows IL](Images/ILDASM.png)
+
+---
+
+name: GC
+
+# Garbage Collector - Stack vs Heap
+
+---
+
+template: GC
+.center[![Stack](Images/Stack.png)]
+.right[Źródło: Wikipedia]
+
+---
+
+template: GC
+.center[![Heap](Images/Heap.png)]
+.center[![Heap1](Images/Heap1.png)]
+.center[![Heap2](Images/Heap2.png)]
+.right[Źródło: Unity Manual]
+
+---
+
+# Testy
+
+### Każdy test liczy czas wywołania funkcji 1000 razy (o ile nie stwierdzono inaczej)
+
+### Każdy test jest powtórzony 30 razy i uzyskany czas jest średnią z wyników
+
+### Sprzęt:
+- CPU - Intel Core i7-4710mq 2.5GHz
+- RAM - 16GB
+- Cache L1 - 256 KB
+- Cache L2 - 1 MB
+- Cache L3 - 6 MB
+- System - Windows 7
+- Mono
+
+---
+
+# Ponowne użycie kolekcji
+
+```
+_list = new List<int>(10000);
+```
+
+ClearList - 40.68ms - 0 MB  
+```
+_list.Clear();
+for (var i = 0; i < 10000; ++i)
+  _list.Add(i);
+```
+
+--
+
+NewList - 196.81ms - 125.5 MB  
+```
+_list = new List<int>();
+...
+```
+
+--
+
+NewWithCapacity - 72.73ms - 38.2 MB  
+```
+_list = new List<int>(10000);
+...
+```
+
+---
+
+# Closure
+
+```
+_list = new List<int>(10000);
+```
+
+Without Closure - 5.68ms - 6.9 MB
+```
+for (var i = 0; i < 100; ++i) {
+  var res = _list.Select(x => x / 2.0f);
+}
+```
+
+--
+
+***
+With Closure - 20.5ms - 16.8 MB
+```
+var div = 2.0f;
+for (var i = 0; i < 100; ++i) {
+  var res = _list.Select(x => x / div);
+}
+```
+
+---
+
+# Co się stało?
+
+Without Closure
+```
+IL_001a: ldftn        instance float32 Tests.MethodTests.ClosureBoxing/'<>c'::'<WithoutClosure>b__2_0'(int32)
+...
+IL_0000: ldarg.1      // x
+IL_0001: ldc.i4.2     
+IL_0002: div          
+IL_0003: ret   
+```
+
+---
+
+# Co się stało?
+
+Closure
+```
+IL_0029: ldftn        instance float32 Tests.MethodTests.ClosureBoxing/'<>c__DisplayClass3_0'::'<WithClosure>b__0'(int32)  
+...  
+.class nested private sealed auto ansi beforefieldinit '<>c__DisplayClass3_0' extends [mscorlib]System.Object
+...
+IL_0000: ldarg.1      // x
+IL_0001: conv.r4      
+IL_0002: ldarg.0      // this
+IL_0003: ldfld        float32 Tests.MethodTests.ClosureBoxing/'<>c__DisplayClass3_0'::'div'
+IL_0008: div          
+IL_0009: ret    
+```
+
+---
+
+# Value Type
+
+- Typy prymitywne: int, byte, char, short, long, float, double, decimal, bool
+- Nullable
+- Zdefiniowane przez użytkownika: Typy wyliczeniowe (`enum`), Struktury (`struct`)
+
+Plusy value type:
+- Mogą być alokowane na stosie (`stack`)
+- Wielkość struktury to wielkość zmiennych, które wchodzą w jej skład
+- Lepsza lokalność przestrzenna danych
+
+Minusy value type:
+- Trzeba uważać na boxing
+- Przekazywane są zawsze przez kopie
+- Brak dziedziczenia
+
+---
+
+# Reference Type
+
+Plusy reference type:
+- Nie ma problemu boxingu
+- Przekazywana jest zawsze referencja (4 bajty lub 8 bajtów)
+- Dziedziczenie, polimorfizm itp.
+
+Minusy reference type:
+- Alokowane tylko na stercie (`heap`)
+- Zarządzane przez GC
+- Każdy obiekt oprócz swoich danych zawiera referencję, nagłówek oraz tablicę metod
+- Przeważnie brak lokalności przestrzennej
+
+---
+
+# Struktury
+
+Kiedy używać według [MSDN](https://docs.microsoft.com/en-us/dotnet/standard/design-guidelines/choosing-between-class-and-struct):
+1. Logicznie reprezentuje jedną wartość (podobnie do typów prymitywnych)
+2. Rozmiar nie przekracza 16 bajtów
+3. Wartości są niezmienne (`immutable`)
+4. Nie będzie wymagany częsty boxing
+
+---
+
+# Struktury
+
+Przykład:
+
+```
+public struct Vector3
+{
+  ...
+  public float x;
+  public float y;
+  public float z;
+  ...
+}
+```
+
+3/4 warunki spełnione:
+1. Reprezentuje jedną wartość
+2. Rozmiar 12 bajtów
+3. Wartości są zmienne ! (brak `readonly`)
+4. Nie jest wymagany boxing
+
+---
+
+# Czy to błąd, że wszystkie warunki nie zostały spełnione?
+
+Sam C# nie trzyma się tych zasad - [Dictionary](https://referencesource.microsoft.com/#mscorlib/system/collections/generic/dictionary.cs,d3599058f8d79be0)
+```
+private struct Entry {
+  public int hashCode;
+  public int next;
+  public TKey key;
+  public TValue value;
+}
+```
+
+2/4 warunki spełnione:
+1. Reprezentuje jedną wartość
+2. Rozmiar 8 bajtów + rozmiar TKey oraz TValue (przeważnie więcej niż 16 bajtów w sumie)
+3. Wartosci są zmienne
+4. Nie jest wymagany częsty boxing
+
+---
+
+# Boxing
+
+```
+_list = new List<int>(10000);
+```
+
+Without Boxing - 61.56ms - 0 MB
+```
+var count = _list.Count - 1;
+for (var i = 0; i < count; ++i)
+{
+  var x = _list[i] + _list[i + 1];
+}
+```
+
+--
+
+With Boxing - 580.14ms - 190.7 MB
+```
+var count = _list.Count - 1;
+for (var i = 0; i < count; ++i)
+{
+    object x = _list[i] + _list[i + 1];
+}
+```
+
+---
+
+# Dlaczego?
+
+With Boxing
+```
+...
+IL_002d: box          [mscorlib]System.Int32
+...
+```
+
+Tak to jest jedyna różnica pomiędzy tymi dwoma metodami (sic!)
+
+---
+
+# Za proste? To zobaczmy inny przykład
+
+```
+enum SomeEnum { a, b, c };
+var dictionary = new Dictionary<SomeEnum, int>();
+dictionary.Add(SomeEnum.a, 2);
+```
+
+```
+IL_0007: ldloc.0      // dictionary
+IL_0008: ldc.i4.0     
+IL_0009: ldc.i4.2     
+IL_000a: callvirt     instance void class [mscorlib]System.Collections.Generic.Dictionary`2<valuetype Tests.MethodTests.ClosureBoxing/SomeEnum, int32>::Add(!0/*valuetype Tests.MethodTests.ClosureBoxing/SomeEnum*/, !1/*int32*/)
+IL_000f: nop     
+```
+
+---
+
+# Za proste? To zobaczmy inny przykład
+
+```
+var value = SomeEnum.a;
+var res = value.GetHashCode();
+```
+
+```
+IL_0012: ldloca.s     'value'
+IL_0014: constrained. Tests.MethodTests.ClosureBoxing/SomeEnum
+IL_001a: callvirt     instance int32 [mscorlib]System.Object::GetHashCode()
+IL_001f: stloc.2      // res
+```
+
+--
+
+***
+```
+var value = 0;
+var res = value.GetHashCode();
+```
+
+```
+IL_0012: ldloca.s     'value'
+IL_0014: call         instance int32 [mscorlib]System.Int32::GetHashCode()
+IL_0019: stloc.2      // res
+```
+
+---
+
+# Constrained.
+
+"(...) If thisType is a value type and thisType does not implement method then ptr is dereferenced, boxed, and passed as the 'this' pointer to the callvirt  method instruction."
+
+.right[Źródło: [MSDN](https://msdn.microsoft.com/en-us/library/system.reflection.emit.opcodes.constrained.aspx)]
+
+---
+
+# Za proste? To zobaczmy inny przykład
+
+```
+var value = SomeEnum.a;
+var res2 = value.Equals(SomeEnum.b);
+```
+
+```
+IL_0020: ldloca.s     'value'
+IL_0022: ldc.i4.1     
+*IL_0023: box          Tests.MethodTests.ClosureBoxing/SomeEnum
+*IL_0028: constrained. Tests.MethodTests.ClosureBoxing/SomeEnum
+IL_002e: callvirt     instance bool [mscorlib]System.Object::Equals(object)
+IL_0033: stloc.3      // res2
+```
+
+--
+
+***
+```
+var value = 0;
+var res2 = value.Equals(1);
+```
+
+```
+IL_001a: ldloca.s     'value'
+IL_001c: ldc.i4.1     
+IL_001d: call         instance bool [mscorlib]System.Int32::Equals(int32)
+IL_0022: stloc.3      // res2
+```
+
+---
+
+# Unsafe
+
+- ClearList - 40ms - 0 MB  
+- NewList - 196ms - 125.5 MB  
+- NewWithCapacity - 72ms - 38.2 MB  
+
+---
+
+#Unsafe
+
+Stackalloc - 7.97ms - 0 MB
+```
+public unsafe void StackArray()
+{
+    int* arr = stackalloc int[10000];
+    for (var i = 0; i < 10000; ++i)
+        arr[i] = i;
+}
+```
+
+AllocHGlobal - 7.07ms - 0 MB
+```
+public unsafe void DynamicUnsafeArray()
+{
+    var arr = Marshal.AllocHGlobal(10000 * sizeof(int));
+    var ptr = (int*) arr.ToPointer();
+    for (var i = 0; i < 10000; ++i)
+        ptr[i] = i;
+
+    Marshal.FreeHGlobal(arr);
+}
+```
+
+---
+
+name: Cache
+
+# Cache
+
+--
+
+Czas dostępu do pamięci - Cykle Procesora
+- Rejestry - 0
+- L1 - 3 - 256 KB
+- L2 - 20+ - 1 MB
+- RAM - 200+
+.right[Źródło: Game Engine Architecture by Jason Gregory]
+.right[Dodatkowo warto zobaczyć: [Czasy dostępów](https://people.eecs.berkeley.edu/~rcs/research/interactive_latency.html)]
+
+--
+
+Czas przetwarzania funkcji
+- SQRT - 13-19
+- SIN - 60-146
+- TAN - 86-204
+- ATAN - 60-352  
+.right[Źródło: [www.agner.org/optimize/instruction_tables.pdf](www.agner.org/optimize)]
+
+---
+
+# Cache
+
+### ISQRT - 3+ cykle procesora
+
+```
+float Q_rsqrt( float number )
+{
+  long i;
+  float x2, y;
+  const float threehalfs = 1.5F;
+
+  x2 = number * 0.5F;
+  y  = number;
+  i  = * ( long * ) &y;                       // evil floating point bit level hacking
+  i  = 0x5f3759df - ( i >> 1 );               // what the fuck? 
+  y  = * ( float * ) &i;
+  y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
+//  y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+
+  return y;
+}
+```
+
+.right[Źródło: [Quake III Arena](https://en.wikipedia.org/wiki/Fast_inverse_square_root#Overview_of_the_code)]
+
+---
+
+# Cache
+
+Test tylko 1 wywołanie funkcji
+
+```
+_list = new int[WIDTH * HEIGHT];
+```
+
+1.
+```
+for (var y = 0; y < HEIGHT; y++)
+  for (var x = 0; x < WIDTH; x++)
+    _list[y * WIDTH + x]++;
+```
+
+2.
+```
+for (var x = 0; x < WIDTH; x++)
+  for (var y = 0; y < HEIGHT; y++)
+    _list[y * WIDTH + x]++;
+```
+
+---
+
+# Cache
+
+`WIDTH = 64`  
+`HEIGHT = 8192 * 1024 / WIDTH`
+
+Rows - 10 ms - (`List<int>` - 88 ms)
+```
+for (var y = 0; y < HEIGHT; y++)
+  for (var x = 0; x < WIDTH; x++)
+    _list[y * WIDTH + x]++;
+```
+
+Columns - 89 ms - (`List<int>` - 249 ms) 
+```
+for (var x = 0; x < WIDTH; x++)
+  for (var y = 0; y < HEIGHT; y++)
+    _list[y * WIDTH + x]++;
+```
+
+--
+
+`WIDTH = 2`  
+Columns - 14 ms  
+Rows - 14 ms
+--
+ - 8.5 ms (Ręczne rozwinięcie pętli wewnętrznej)  
+
+---
+
+# Jak duża jest linia Cache?
+
+--
+.center[.title[64B]]  
+--
+.center[sizeof(int) = 4 B]
+.center[WIDTH = 64 / 4 = 16]
+
+--
+
+| WIDTH | COLUMNS | ROWS |
+|-------|---------|------|
+| 128   | 86 ms   | 10 ms|
+| 64    | 89 ms   | 10 ms|
+| 32    | 90 ms   | 10 ms|
+| 16    | 59 ms   | 9 ms |
+
+.right[[PREFETCH](https://en.wikipedia.org/wiki/Cache_prefetching)]
+---
+
+name: Complexity
+
+# Złożoność obliczeniowa
+
+| Structure   | Access    | Search    | Insertion | Deletion  |
+| ----------- | --------- | --------- | --------- | --------- |
+| Array/List  | Θ(1) O(1) | Θ(n) O(n) | Θ(n) O(n) | Θ(n) O(n) |
+| Queue/Stack | Θ(n) O(n) | Θ(n) O(n) | Θ(1) O(1) | Θ(1) O(1) |
+| Linked List | Θ(n) O(n) | Θ(n) O(n) | Θ(1) O(1) | Θ(1) O(1) |
+| HashSet     | N/A       | Θ(1) O(n) | Θ(1) O(n) | Θ(1) O(n) |
+
+.right[Źródło: [Big-O Cheat Sheet](http://bigocheatsheet.com/)]
+
+---
+
+# Złożoność obliczeniowa
+
+| Algorithm      | Best        | Average     | Worst       |
+| -------------- | ----------- | ----------- | ----------- |
+| Mergesort      | Ω(n log(n)) | Θ(n log(n)) | O(n log(n)) | 
+| Quicksort      | Ω(n log(n)) | Θ(n log(n)) | O(n^2)      |
+| Heapsort       | Ω(n log(n)) | Θ(n log(n)) | O(n log(n)) | 
+| Insertion Sort | Ω(n)        | Θ(n^2)      | O(n^2)      |
+
+.right[Źródło: [Big-O Cheat Sheet](http://bigocheatsheet.com/)]
+
+--
+
+Z jakiego algorytmu sortowania korzysta C#?
+
+--
+
+[Introsort](https://msdn.microsoft.com/en-us/library/6tf1f0bc.aspx) - algorytm hybrydowy korzystający z Insertion sort, Quicksort oraz Heapsort w zależności od liczby elementów
+
+---
+
+name: Unity
+
+# Optymalizacja Unity API
+
+Dane testu:  
+Czas - 60 klatek  
+Liczba instacji - 100000
+
+Test #1 - Pusty Update
+
+Test #2 - `arr.length = 32`
+```
+var res = .0f;
+for (var i = 0; i < arr.Length; ++i)
+    res += arr[i]++;
+return res;
+```
+
+---
+
+# Optymalizacja Unity API - Update
+
+| Test Update           | Czas Startu | Czas Test #1 | Czas Test #2 |
+| --------------------- | ----------- | ------------ | ------------ |
+| Pusty MonoBehaviour   | 1687 ms     | 38 ms        | 38 ms        |
+| Event                 | >60000 ms   | N/A          | N/A          |
+| HashSet               | 1711 ms     | 84 ms        | 1431 ms      |
+| Interface             | 1793 ms     | 47 ms        | 1412 ms      |
+| Instrusive List       | 1756 ms     | 124 ms       | 1175 ms      |
+| List                  | 1617 ms     | 40 ms        | 1440 ms      |
+| MonoBehaviour Update  | 1723 ms     | 911 ms       | 2092 ms      |
+
+---
+
+# Optymalizacja Unity API - Wektory
+
+Wektor a potem skalary - 9.41 ms - Przy każdym mnożeniu tworzymy nowy wektor
+```
+for (var i = 1; i < 100; ++i)
+{
+    var vec = Vector3.one * 23525.0f;
+    float a = i;
+*   vec = vec * a * a * a * a;
+}
+```
+
+Skalary a potem wektor - 3.8 ms - Tworzony jest jedynie jeden nowy wektor
+```
+vec = vec * (a * a * a * a);
+```
+
+Operacje na zmiennych wektora - 2.93 ms - Brak tworzenia nowego wektora
+```
+var mul = a * a * a * a;
+vec.x *= mul;
+vec.y *= mul;
+vec.z *= mul;
+```
+
+---
+
+name: Threads
+
+class: center, middle
+
+# Programowanie współbieżne, Coroutines, Compute Shaders
+
+---
+
+name: Sources
+
+# Źródła
+
+- http://adamsitnik.com/Value-Types-vs-Reference-Types/
+- http://bigocheatsheet.com/
+- Unite 2016 oraz 2017
+- https://docs.unity3d.com/Manual/MobileOptimizationPracticalScriptingOptimizations.html
+- https://www.dotnetperls.com/optimization
+- https://docs.unity3d.com/Manual/BestPracticeUnderstandingPerformanceInUnity4-1.html
+- https://docs.unity3d.com/Manual/BestPracticeUnderstandingPerformanceInUnity7.html
+- https://www.youtube.com/watch?v=GPpD4BBtA1Y&feature=youtu.be
+- https://github.com/dbartolini/data-oriented-design#code-examples
+- https://jacksondunstan.com/articles/3740
+- https://people.eecs.berkeley.edu/~rcs/research/interactive_latency.html
+- http://www.humus.name/Articles/Persson_LowlevelShaderOptimization.pdf
+- https://dataorientedprogramming.wordpress.com/tag/mike-acton/
+- http://www.agner.org/optimize/
+- https://gist.github.com/ocornut/cb980ea183e848685a36
+- Game Engine Architecture by Jason Gregory
+
+---
+
+class: center, middle
+
+# .title[Bonus]
+
+---
+
+# Konkatenacja stringów
+
+Symbol Plus - 28.9 ms - 16.5 MB  
+
+Za każdym wywołaniem `+=` cały string zostanie skopiowany do nowej tablicy na tyle dużej, aby zmieścić dodatkowe znaki (w naszym przypadku o 1 za każdym wywołaniem funkcji)
+```
+var value = "";
+for (var i = 0; i < 100; ++i)
+  value += Chars[Random.Range(0, Chars.Length)];
+var res = value;
+```
+
+String Builder - 2.75 ms - 0.5 MB  
+
+String builder wewnątrz utrzymuje tablicę znaków, którą zarządza z poziomu `unsafe` dlatego nie wymaga alokacji na GC. Jedyna alokacja następuje przy wywołaniu `ToString()`
+```
+var builder = new StringBuilder("");
+for (var i = 0; i < 100; ++i)
+  builder.Append(Chars[Random.Range(0, Chars.Length)]);
+var res = builder.ToString();
+```
+
+---
+
+# Pusty String
+
+1. Ta wersja jest równoważna wersji 2.
+
+```
+for (var i = 0; i < 1000; ++i) {
+  var value = "";
+}
+```
+
+2. Nie ma więc różnicy, z której skorzystacie
+
+```
+for (var i = 0; i < 1000; ++i) {
+  var value = string.Empty;
+}
+```
+
+---
+
+# Pętle
+
+```
+private class IntObj
+{
+  public int Value; 
+  public int PropValue { get { return Value; } set { Value = value; } }
+  public int AutoPropValue { get; set; }
+}
+
+private List<IntObj> _list = new List<IntObj>(100000);
+```
+
+---
+
+# Pętle
+
+For z count - 462 ms  
+```
+for (var i = 0; i < _list.Count; ++i)
+  _list[i].Value++;
+```
+
+For - 377 ms  
+```
+var count = _list.Count;
+for (var i = 0; i < count; ++i)
+  _list[i].Value++;
+```
+
+While - 376 ms
+```
+var i = 0;
+var count = _list.Count;
+while (i < count)
+{
+    _list[i].Value++;
+    i++;
+}
+```
+
+---
+
+# Pętle
+
+Foreach - 867 ms
+```
+foreach (var el in _list) { 
+    el.Value++;
+}
+```
+
+LINQ - 7604 ms (z Select czy innymi metodami jeszcze gorzej z powodu dodatkowej alokacji kolekcji.)
+```
+var res = _list.All(x => x.Value++ >= 0);
+```
+
+For z property (to samo z auto property) - 402 ms
+```
+var count = _list.Count;
+for (var i = 0; i < count; ++i)
+    _list[i].PropValue++;
+```
+
+---
+
+# Pętle wnioski
+
+- `Count` w pętli powoduje dodatkowe wywołanie metody (nie jest to duży koszt ale zawsze)
+- Nie ma różnicy między `while` a `for`
+- Nie ma różnicy pomiędzy `++i` a `i++`
+- Nie ma różnicy czy iterujemy w górę do `count` czy w dół do `0`
+- `Foreach` jest w większości przypadków gorszy od `for`, ale nie zawsze. W nowszej wersji C# jest bardziej zoptymalizowany, ale nadal wymaga więcej czasu.
+- `LINQ` jest zawsze bardzo powolne, więc lepiej unikać
+- `Property`, czyli właściwości są zawsze dodatkowym wywołaniem metody. Koszt nie jest olbrzymi, więc należy się zastanowić czy lepiej korzystać z właściwości zgodnie z radami [MSDN](https://msdn.microsoft.com/en-us/library/65zdfbdt.aspx). Dodatkowo w nowszej wersji C# został zoptymalizowany (chociaż nadal bezpośredni dostęp jest szybszy).
+
+---
+
+# Debug
+
+UWAGA: To są czasy w buildzie `RELEASE` na windowsa. To nie są wyniki z edytora Unity. Nawet w buildzie logi nadal są tworzone.
+
+Normal Debug - 1139 ms
+```
+for (var i = 0; i < 1000; ++i)
+  Debug.Log("asdf" + 423 + "vvre" + 35.123f);
+```
+
+Logger Off Debug - 1146 ms  
+```
+Debug.unityLogger.logEnabled = false;
+for (var i = 0; i < 1000; ++i)
+  Debug.Log("asdf" + 423 + "vvre" + 35.123f);
+```
+Jak wyłączymy logger to logi nie pokazują się, ale nadal wykonywane jest wywołanie metody razem ze wszystkimi operacjami.
+
+Jak widzimy wyłączenie loggera nic nie daje. Jednakże na ratunek przychodzi nam ...
+
+---
+
+# Conditional
+
+Conditional Off Debug - 0.64ms 
+```
+[Conditional("DEBUG")]
+private void Log(string log) {
+  Debug.Log(log);
+}
+
+for (var i = 0; i < 1000; ++i)
+  Log("asdf" + 423 + "vvre" + 35.123f);
+```
+Metoda jest usuwana gdy nie ma zdefiniowanego symbolu `DEBUG`, np. jeżeli robimy builda `RELEASE` (normalnie logi nie są usuwane nawet w buildzie release). Oczywiście można każde wywołanie opatrzeć w `#if UNITY_EDITOR`, ale nie jest to zbyt wygodne.
+
+UWAGA: Taka implementacja spowoduje, że klikając dwa razy w konsoli przeniesie nas do metody `Log`, a nie w miejsce gdzie wywoływaliśmy naszą metodę. Żeby uniknąć tego można stworzyć klasę `Debug` w globalnym `namespace` i zawrzeć ją w `#if !UNITY_EDITOR`: [Implementacja](https://answers.unity.com/questions/126315/debuglog-in-build.html)
+
+---
+
+# Kilka dobrych rad
+
+- Ogranij Data Oriented Design
+- Naucz się czytać Intermediate Language (Kod pośredni)
+- Testuj na platformie docelowej (minimum to sprawdzenie Mono oraz IL2CPP)
+- Nie ufaj kompilatorowi, on nie zoptymalizuje wszystkiego (nawet rzeczy, które są oczywiste)
+- Jeżeli masz czas i wątpliwości - przetestuj
+- Pamiętaj o cache
+- Zanim napiszesz pierwszą linijkę kodu zastanów się nad algorytmem oraz ułożeniem danych w pamięci
+- Uważaj na Garbage Collector
+- Zaprzyjaźnij się ze strukturami
+- Czytaj dokumentacje (Unity, MSDN itp.) oraz fora (najlepiej aktualne)
+- Nie próbuj optymalizować wszystkiego. Czas programisty jest często ważniejszy niż czas pracy procesora, także optymalizuj rzeczy ważne 
+- Wszystko co tutaj powiedziałem może się w pewnym stopniu zmienić w kolejnych wersjach Unity oraz Mono. W większości przypadków będzie można zauważyć przyspieszenie, ale prawdopodobnie jeżeli coś było wolniejsze to nadal takie będzie
+- Optymalizacja nie jest najważniejsza, w dużej części przypadków powoduje to pogorszenie zarządzania kodem, debuggowalności, czy czytelności
+
+
+    </textarea>
+    <script src="https://remarkjs.com/downloads/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create({
+        ratio: '16:9',
+        highlightLanguage: 'cs',
+        highlightStyle: 'vs',
+        highlightLines: true
+      });
+
+
+      var turtle = document.getElementById("turtle");
+      var container = document.getElementById("turtleContainer");
+      var time = 0;
+      var rotateMax = 30;
+      var speed = 0.001;
+
+      function update() {
+        time += 16;
+        var rotate = Math.sin(time * speed) * rotateMax;
+        turtle.style.transform = "rotate(" + rotate + "deg)";
+      }
+
+      (function() {
+        setInterval(update, 16);
+      })();
+    </script>
+  </body>
+</html>
